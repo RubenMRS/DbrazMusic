@@ -34,6 +34,14 @@ public sealed class BotConfig
     public string? CookiesToPass => UseCookies ? ResolvedCookies : null;
 
     /// <summary>
+    /// Forçar IPv4: o YouTube pontua pior (e por blocos /64) os IPv6 de datacenter.
+    /// </summary>
+    public bool ForceIPv4 { get; set; } = true;
+
+    /// <summary>Cliente do YouTube que já se sabe funcionar neste servidor.</summary>
+    public string? PlayerClient { get; set; }
+
+    /// <summary>
     /// Lê o config.json. Se o ficheiro não existir (por exemplo no Render),
     /// usa os valores por omissão e as variáveis de ambiente.
     /// </summary>

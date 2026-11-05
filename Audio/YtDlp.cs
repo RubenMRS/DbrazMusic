@@ -8,9 +8,12 @@ public static class YtDlp
 {
     private static readonly TimeSpan ResolveTimeout = TimeSpan.FromSeconds(60);
 
+    /// <summary>Clientes do YouTube a experimentar quando o habitual é bloqueado.</summary>
+    private static readonly string[] FallbackClients = ["web_embedded", "mweb", "android", "tv"];
+
     /// <summary>
     /// Resolve um link ou uma pesquisa em informação da música (sem descarregar áudio).
-    /// Se o YouTube rejeitar a sessão dos cookies, tenta outra vez sem eles.
+    /// Se o YouTube bloquear, tenta sem cookies e depois com outros clientes.
     /// </summary>
     public static async Task<(TrackInfo? Info, string? Error)> ResolveAsync(
         string query, BotConfig config, CancellationToken cancellationToken = default)
@@ -23,20 +26,48 @@ public static class YtDlp
 
         var target = isUrl ? query : $"ytsearch1:{query}";
 
-        var result = await ResolveOnceAsync(ytDlp, target, config, cancellationToken);
-
-        if (result.Info != null || !config.UseCookies || !IsSessionRejected(result.Error))
+        var result = await ResolveOnceAsync(ytDlp, target, config, config.PlayerClient, cancellationToken);
+        if (result.Info != null || !IsSessionRejected(result.Error))
             return result;
 
-        // Cookies inválidos (o Google roda-os) fazem o YouTube tratar o pedido como
-        // suspeito. Sem eles, o PO token do bgutil é o suficiente.
-        Log.Warn("O YouTube rejeitou a sessão dos cookies; a tentar sem cookies.");
-        config.CookiesDisabled = true;
+        // 2) Cookies inválidos (o Google roda-os) fazem o YouTube tratar o pedido
+        //    como suspeito. Sem eles, o PO token do bgutil é o suficiente.
+        if (config.UseCookies)
+        {
+            Log.Warn("O YouTube rejeitou a sessão dos cookies; a tentar sem cookies.");
+            config.CookiesDisabled = true;
 
-        return await ResolveOnceAsync(ytDlp, target, config, cancellationToken);
+            result = await ResolveOnceAsync(ytDlp, target, config, config.PlayerClient, cancellationToken);
+            if (result.Info != null)
+                return result;
+        }
+
+        // 3) Cada cliente do YouTube é pontuado de forma diferente pelo anti-bot.
+        foreach (var client in FallbackClients)
+        {
+            if (client == config.PlayerClient)
+                continue;
+
+            Log.Info($"A tentar o cliente do YouTube \"{client}\"...");
+
+            var attempt = await ResolveOnceAsync(ytDlp, target, config, client, cancellationToken);
+            if (attempt.Info != null)
+            {
+                config.PlayerClient = client;
+                Log.Ok($"Cliente do YouTube que funcionou: {client}");
+                return attempt;
+            }
+
+            if (!IsSessionRejected(attempt.Error))
+                return attempt;
+
+            result = attempt;
+        }
+
+        return (null, result.Error);
     }
 
-    /// <summary>Sinais de que o problema é a sessão (cookies), não o vídeo.</summary>
+    /// <summary>Sinais de que o problema é o bloqueio do YouTube, não o vídeo.</summary>
     private static bool IsSessionRejected(string? error)
         => error != null
            && (error.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase)
@@ -45,7 +76,7 @@ public static class YtDlp
                || error.Contains("not a bot", StringComparison.OrdinalIgnoreCase));
 
     private static async Task<(TrackInfo? Info, string? Error)> ResolveOnceAsync(
-        string ytDlp, string target, BotConfig config, CancellationToken cancellationToken)
+        string ytDlp, string target, BotConfig config, string? client, CancellationToken cancellationToken)
     {
         var psi = new ProcessStartInfo
         {
@@ -60,6 +91,12 @@ public static class YtDlp
 
         foreach (var arg in BuildBaseArgs(config))
             psi.ArgumentList.Add(arg);
+
+        if (client != null && client != config.PlayerClient)
+        {
+            psi.ArgumentList.Add("--extractor-args");
+            psi.ArgumentList.Add($"youtube:player_client={client}");
+        }
 
         psi.ArgumentList.Add("--dump-json");
         psi.ArgumentList.Add("--skip-download");
@@ -145,6 +182,10 @@ public static class YtDlp
         yield return "--no-warnings";
         yield return "--no-playlist";
 
+        // IPv6 de datacenter é pontuado (por bloco /64) muito pior pelo anti-bot do YouTube.
+        if (config.ForceIPv4)
+            yield return "--force-ipv4";
+
         if (config.CookiesToPass is { } cookies)
         {
             yield return "--cookies";
@@ -160,6 +201,13 @@ public static class YtDlp
 
         foreach (var extra in config.ExtraYtDlpArgs)
             yield return extra;
+
+        // Cliente que já provou funcionar neste servidor (a resolução guarda-o em memória).
+        if (config.PlayerClient is { } client)
+        {
+            yield return "--extractor-args";
+            yield return $"youtube:player_client={client}";
+        }
     }
 
     private static string? FindDeno(string? ytDlpPath)
@@ -257,79 +305,24 @@ public static class YtDlp
         => text.Length <= max ? text : text[^max..];
 
     /// <summary>
-    /// Teste completo ao yt-dlp (chamado pelo /diagnostico). Devolve as linhas que
-    /// explicam o bloqueio: provider de PO tokens, cliente do YouTube e erro final.
-    /// Se os cookies forem rejeitados, repete sem eles.
+    /// Teste completo (chamado pelo /diagnostico): corre a mesma cadeia do /play e diz
+    /// qual o cliente que funcionou ou, se nada funcionar, o diagnóstico do último erro.
     /// </summary>
     public static async Task<string> DiagnoseAsync(BotConfig config, string url)
     {
-        var first = await DiagnoseOnceAsync(config, url);
-        var firstFailed = first.StartsWith("exit=1", StringComparison.Ordinal)
-                          || first.StartsWith("O yt-dlp não respondeu", StringComparison.Ordinal);
+        var (info, error) = await ResolveAsync(url, config);
 
-        if (!config.UseCookies || !firstFailed || !IsSessionRejected(first))
-            return first;
+        var header = info != null
+            ? "resultado: OK\n"
+              + $"cliente: {config.PlayerClient ?? "(o de omissão)"}\n"
+              + $"cookies: {(config.UseCookies ? "sim" : "não")}\n"
+              + $"título: {info.Title}"
+            : "resultado: FALHOU (o IP do servidor está bloqueado)\n"
+              + $"cliente: {config.PlayerClient ?? "(nenhum funcionou)"}\n"
+              + $"cookies: {(config.UseCookies ? "sim" : "não")}\n\n"
+              + error;
 
-        config.CookiesDisabled = true;
-        var second = await DiagnoseOnceAsync(config, url);
-
-        return $"--- com cookies ---\n{first}\n\n--- sem cookies ---\n{second}";
-    }
-
-    private static async Task<string> DiagnoseOnceAsync(BotConfig config, string url)
-    {
-        if (config.ResolvedYtDlp is not { } ytDlp)
-            return "yt-dlp não encontrado.";
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = ytDlp,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-
-        foreach (var arg in BuildBaseArgs(config))
-            psi.ArgumentList.Add(arg);
-
-        psi.ArgumentList.Add("-v");
-        psi.ArgumentList.Add("--simulate");
-        psi.ArgumentList.Add("--skip-download");
-        psi.ArgumentList.Add(url);
-
-        using var process = new Process { StartInfo = psi };
-        try
-        {
-            process.Start();
-        }
-        catch (Exception ex)
-        {
-            return $"Não consegui executar o yt-dlp: {ex.Message}";
-        }
-
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
-
-        try
-        {
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
-            var stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
-            await process.WaitForExitAsync(timeout.Token);
-            await stdoutTask;
-
-            var stderr = await stderrTask;
-            var diagnostics = Diagnostics(stderr);
-            var header = $"exit={process.ExitCode}";
-
-            return diagnostics.Length > 0 ? $"{header}\n{diagnostics}" : $"{header}\n(sem linhas relevantes)";
-        }
-        catch (OperationCanceledException)
-        {
-            TryKill(process);
-            return "O yt-dlp não respondeu em 90 s.";
-        }
+        return header;
     }
 
     private static void TryKill(Process process)
