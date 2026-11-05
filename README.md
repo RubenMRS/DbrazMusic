@@ -101,9 +101,25 @@ O projeto já traz `Dockerfile` e `render.yaml`, prontos para o Render.
 | `libsodium.dll` / `opus.dll` / `libdave.dll` em `natives\` | pacotes `libsodium23`/`libopus0` + `libdave.so` oficial |
 | token no `config.json` | `DISCORD_TOKEN` (variável de ambiente) |
 | logs só na consola | consola do Render + `bot.log` (efémero) |
+| PO tokens gerados pelo teu IP | servidor **bgutil** dentro do contentor (`127.0.0.1:4416`) |
 
 Variáveis de ambiente suportadas: `DISCORD_TOKEN`, `DISCORD_GUILD_ID` (ou `GUILD_ID`),
 `YTDLP_PATH`, `FFMPEG_PATH`, `COOKIES_FILE`, `PORT` (usada pelo Render).
+
+### PO tokens (o que faz o `/play` funcionar no Render)
+
+Desde 2026 o YouTube não se contenta com cookies em IPs de datacenter: exige um
+**PO token** (proof-of-origin). A imagem arranca o servidor
+[bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)
+em `127.0.0.1:4416` e instala o plugin correspondente do yt-dlp. No arranque deves ver:
+
+```
+[ OK ] PO token provider (bgutil) em 127.0.0.1:4416
+```
+
+Para confirmar que o yt-dlp o está a usar: `yt-dlp -v <url>` mostra
+`PO Token Providers: bgutil:http-2.0.2 (external)`.
+
 
 ### Passos
 
@@ -150,6 +166,7 @@ esteja a tocar música. Para não morrer:
 | `/play` diz "Não consegui encontrar" | Atualiza o yt-dlp: `tools\yt-dlp.exe --update-to nightly@latest` (o `setup.ps1` já traz o nightly) |
 | YouTube pede login / "Sign in to confirm you're not a bot" | Exporta os cookies do browser para `cookies.txt` (extensão *Get cookies.txt LOCALLY*) e indica o caminho em `cookiesFile` no `config.json` |
 | "cookies are no longer valid" | O Google roda os cookies; exporta outra vez e substitui. Usa um perfil de browser só para isto |
+| Mesmo com cookies: "Sign in to confirm you're not a bot" | IP de datacenter: confirma no log de arranque `[ OK ] PO token provider (bgutil)`. Se falhar, vê o erro do node acima dessa linha |
 | Bot entra mas não se ouve nada | Confirma a permissão **Speak** no canal e vê os logs na consola |
 | Comandos slash não aparecem | Preenche o `guildId` e reinicia; no cliente Discord faz `Ctrl+R` |
 | "Token inválido" | Copia outra vez em Bot → Reset Token (não uses o Client Secret) |

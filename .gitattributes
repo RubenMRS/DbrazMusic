@@ -1,0 +1,3 @@
+# Scripts que correm dentro do Linux têm de manter os fins de linha LF.
+*.sh text eol=lf
+Dockerfile text eol=lf

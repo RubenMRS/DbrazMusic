@@ -11,6 +11,12 @@ COPY . .
 RUN dotnet publish MusicBot.csproj -c Release -o /out /p:UseAppHost=false
 
 
+# ---- PO token provider do yt-dlp (ficheiros da imagem oficial) ----
+# Desde 2026 o YouTube exige um PO token a IPs de datacenter (Render). O servidor
+# bgutil gera-os localmente (127.0.0.1:4416) e o plugin do yt-dlp fala com ele.
+FROM brainicism/bgutil-ytdlp-pot-provider:2.0.2 AS pot
+
+
 # ---- Runtime ----
 FROM mcr.microsoft.com/dotnet/runtime:10.0
 
@@ -34,6 +40,20 @@ RUN curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x8
  && chmod 0755 /usr/local/bin/deno \
  && rm -f /tmp/deno.zip
 
+# Plugin do yt-dlp que pede os PO tokens ao servidor bgutil (pasta ao lado do binário)
+RUN mkdir -p /tmp/pot /usr/local/bin/yt-dlp-plugins/bgutil \
+ && curl -fsSL https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases/download/2.0.2/bgutil-ytdlp-pot-provider.zip \
+      -o /tmp/pot/plugin.zip \
+ && unzip -q /tmp/pot/plugin.zip -d /tmp/pot/unzipped \
+ && cp -r "$(find /tmp/pot/unzipped -type d -name yt_dlp_plugins -print -quit)" /usr/local/bin/yt-dlp-plugins/bgutil/ \
+ && test -d /usr/local/bin/yt-dlp-plugins/bgutil/yt_dlp_plugins \
+ && rm -rf /tmp/pot
+
+# Servidor bgutil já compilado (node + node_modules da imagem oficial)
+COPY --from=pot /usr/local/bin/node /usr/local/bin/node
+COPY --from=pot /app/build /opt/bgutil/build
+COPY --from=pot /app/node_modules /opt/bgutil/node_modules
+
 # libdave (encriptação E2EE obrigatória da voz) para Linux x64
 RUN curl -fsSL https://github.com/discord/libdave/releases/download/v1.2.2/cpp/libdave-Linux-X64-boringssl.zip \
       -o /tmp/libdave.zip \
@@ -44,9 +64,12 @@ RUN curl -fsSL https://github.com/discord/libdave/releases/download/v1.2.2/cpp/l
 WORKDIR /app
 COPY --from=build /out ./
 
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
+
 ENV DOTNET_RUNNING_IN_CONTAINER=true \
     DOTNET_NOLOGO=1 \
     TZ=Europe/Lisbon
 
 EXPOSE 8080
-CMD ["dotnet", "MusicBot.dll"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
