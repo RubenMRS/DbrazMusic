@@ -288,6 +288,7 @@ public static class CommandHandler
         text.AppendLine($"cookies: {(config.UseCookies ? config.ResolvedCookies : "desativados")}");
         text.AppendLine($"args extra: {(config.ExtraYtDlpArgs.Length == 0 ? "(nenhum)" : string.Join(' ', config.ExtraYtDlpArgs))}");
         text.AppendLine($"PO provider: {await PotStatusAsync()}");
+        text.AppendLine($"PO token: {await PotTokenTimingAsync()}");
         text.AppendLine();
         text.AppendLine(await YtDlp.DiagnoseAsync(config, "https://www.youtube.com/watch?v=dQw4w9WgXcQ"));
 
@@ -313,6 +314,32 @@ public static class CommandHandler
         catch (Exception ex)
         {
             return $"indisponível ({ex.GetType().Name})";
+        }
+    }
+
+    /// <summary>
+    /// Pede um PO token e mede quanto tempo demora. Num CPU fraco (Render free)
+    /// esta é a operação mais pesada e explica os timeouts.
+    /// </summary>
+    private static async Task<string> PotTokenTimingAsync()
+    {
+        var url = Environment.GetEnvironmentVariable("POT_PROVIDER_URL") ?? "http://127.0.0.1:4416";
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
+            using var content = new StringContent(
+                "{\"content_binding\":\"diagnostico\"}", Encoding.UTF8, "application/json");
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var response = await http.PostAsync($"{url.TrimEnd('/')}/get_pot", content);
+            stopwatch.Stop();
+
+            return $"HTTP {(int)response.StatusCode} em {stopwatch.Elapsed.TotalSeconds:F1}s";
+        }
+        catch (Exception ex)
+        {
+            return $"falhou ({ex.GetType().Name})";
         }
     }
 

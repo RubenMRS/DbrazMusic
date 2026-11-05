@@ -29,4 +29,20 @@ if [ "$ok" -ne 1 ] && kill -0 "$POT_PID" 2>/dev/null; then
     echo "[WARN] O PO token provider não respondeu em 20 s - o bot arranca na mesma."
 fi
 
+# Aquece o provider em segundo plano: o primeiro PO token é o mais caro (BotGuard
+# num CPU fraco) e assim o primeiro /play do utilizador já o encontra em cache.
+(
+    yt-dlp --ignore-config --no-warnings --no-playlist --force-ipv4 \
+        --js-runtimes "deno:/usr/local/bin/deno" \
+        --simulate --skip-download --print "%(title)s" \
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ" >/tmp/warmup.log 2>&1
+
+    code=$?
+    if [ "$code" -eq 0 ]; then
+        echo "[ OK ] Aquecimento do PO provider: $(head -n 1 /tmp/warmup.log)"
+    else
+        echo "[WARN] Aquecimento do PO provider falhou (exit=$code): $(tail -n 1 /tmp/warmup.log)"
+    fi
+) &
+
 exec dotnet MusicBot.dll

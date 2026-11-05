@@ -6,8 +6,8 @@ namespace MusicBot.Audio;
 
 public static class YtDlp
 {
-    private static readonly TimeSpan ResolveTimeout = TimeSpan.FromSeconds(35);
-    private static readonly TimeSpan TotalResolveTimeout = TimeSpan.FromSeconds(120);
+    private static readonly TimeSpan ResolveTimeout = TimeSpan.FromSeconds(75);
+    private static readonly TimeSpan TotalResolveTimeout = TimeSpan.FromSeconds(300);
 
     /// <summary>Clientes do YouTube a experimentar quando o habitual é bloqueado.</summary>
     private static readonly string[] FallbackClients = ["web_embedded", "mweb", "android", "tv"];
@@ -33,12 +33,18 @@ public static class YtDlp
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TotalResolveTimeout);
 
+        var trail = new List<string>();
+
+        var clock = Stopwatch.StartNew();
         var result = await ResolveOnceAsync(ytDlp, target, config, config.PlayerClient, deadline.Token);
+        clock.Stop();
+        trail.Add(TrailLine(config.PlayerClient, clock.Elapsed, result.Error));
+
         if (result.Info != null || !IsSessionRejected(result.Error))
-            return result;
+            return (result.Info, WithTrail(result.Error, trail));
 
         if (progress != null)
-            await progress("⏳ O YouTube bloqueou o pedido. A tentar alternativas (pode demorar ~1 min)…");
+            await progress("⏳ O YouTube bloqueou o pedido. A tentar alternativas (pode demorar alguns minutos)…");
 
         // 2) Cookies inválidos (o Google roda-os) fazem o YouTube tratar o pedido
         //    como suspeito. Sem eles, o PO token do bgutil é o suficiente.
@@ -47,9 +53,13 @@ public static class YtDlp
             Log.Warn("O YouTube rejeitou a sessão dos cookies; a tentar sem cookies.");
             config.CookiesDisabled = true;
 
+            clock.Restart();
             result = await ResolveOnceAsync(ytDlp, target, config, config.PlayerClient, deadline.Token);
+            clock.Stop();
+            trail.Add("sem cookies — " + TrailLine(config.PlayerClient, clock.Elapsed, result.Error));
+
             if (result.Info != null)
-                return result;
+                return (result.Info, null);
         }
 
         // 3) Cada cliente do YouTube é pontuado de forma diferente pelo anti-bot.
@@ -60,21 +70,44 @@ public static class YtDlp
 
             Log.Info($"A tentar o cliente do YouTube \"{client}\"...");
 
+            clock.Restart();
             var attempt = await ResolveOnceAsync(ytDlp, target, config, client, deadline.Token);
+            clock.Stop();
+            trail.Add(TrailLine(client, clock.Elapsed, attempt.Error));
+
             if (attempt.Info != null)
             {
                 config.PlayerClient = client;
                 Log.Ok($"Cliente do YouTube que funcionou: {client}");
-                return attempt;
+                return (attempt.Info, null);
             }
 
             if (!IsSessionRejected(attempt.Error))
-                return attempt;
+                return (null, WithTrail(attempt.Error, trail));
 
             result = attempt;
         }
 
-        return (null, result.Error);
+        return (null, WithTrail(result.Error, trail));
+    }
+
+    private static string TrailLine(string? client, TimeSpan elapsed, string? error)
+    {
+        var label = client ?? "omissão";
+        var reason = error?.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+
+        if (reason != null)
+            reason = Flatten(reason, 100);
+
+        return $"{label}: {elapsed.TotalSeconds:F0}s — {reason ?? "OK"}";
+    }
+
+    private static string? WithTrail(string? error, List<string> trail)
+    {
+        if (error == null)
+            return null;
+
+        return error + "\n\n```\nTentativas:\n" + string.Join('\n', trail) + "\n```";
     }
 
     /// <summary>Sinais de que o problema é o bloqueio do YouTube, não o vídeo.</summary>
@@ -115,6 +148,7 @@ public static class YtDlp
         psi.ArgumentList.Add(target);
 
         using var process = new Process { StartInfo = psi };
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             process.Start();
@@ -137,8 +171,15 @@ public static class YtDlp
         catch (OperationCanceledException)
         {
             TryKill(process);
-            return (null, "O YouTube demorou demasiado a responder. Tenta outra vez.");
+            Log.Warn($"O yt-dlp não terminou em {ResolveTimeout.TotalSeconds:F0}s" +
+                     (client != null ? $" (cliente {client})" : "") + ".");
+            return (null, $"O YouTube demorou mais de {ResolveTimeout.TotalSeconds:F0}s a responder. Tenta outra vez.");
         }
+
+        stopwatch.Stop();
+        Log.Info($"yt-dlp respondeu em {stopwatch.Elapsed.TotalSeconds:F1}s" +
+                 (client != null ? $" (cliente {client})" : "") +
+                 (process.ExitCode == 0 ? "" : $", exit={process.ExitCode}"));
 
         var stdout = await stdoutTask;
         var stderr = await stderrTask;
@@ -291,7 +332,7 @@ public static class YtDlp
         // Com -v o yt-dlp imprime o traceback todo; a razão real está na linha "ERROR:".
         var error = lines.FirstOrDefault(l => l.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase));
         if (error != null)
-            return error["ERROR:".Length..].Trim();
+            return Flatten(error["ERROR:".Length..], 400);
 
         var useful = lines
             .Where(l => !IsTracebackLine(l))
@@ -299,8 +340,22 @@ public static class YtDlp
             .ToArray();
 
         return useful.Length > 0
-            ? string.Join(" | ", useful)
+            ? Flatten(string.Join(" | ", useful), 400)
             : "Erro desconhecido no yt-dlp.";
+    }
+
+    /// <summary>Junta tudo numa linha (as mensagens do yt-dlp trazem quebras de linha).</summary>
+    private static string Flatten(string text, int max)
+    {
+        var flat = string.Join(' ', text
+            .Split(['\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Trim())
+            .Where(part => part.Length > 0));
+
+        while (flat.Contains("  ", StringComparison.Ordinal))
+            flat = flat.Replace("  ", " ", StringComparison.Ordinal);
+
+        return flat.Length <= max ? flat : flat[..max] + "…";
     }
 
     private static bool IsTracebackLine(string line)
