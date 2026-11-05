@@ -52,6 +52,16 @@ if (config.ResolvedYtDlp == null)
 if (config.ResolvedFfmpeg == null)
     Log.Warn("ffmpeg não encontrado - /play não vai funcionar. Corre setup.ps1.");
 
+if (config.ResolvedCookies is { } cookies)
+{
+    Log.Ok($"Cookies do YouTube: {cookies}");
+}
+else
+{
+    Log.Warn("Sem cookies do YouTube. Se o /play disser \"Sign in to confirm you're not a bot\", " +
+             "adiciona o Secret File cookies.txt (Render: /etc/secrets/cookies.txt).");
+}
+
 StartHealthServerIfNeeded();
 
 var socketConfig = new DiscordSocketConfig

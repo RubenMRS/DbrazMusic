@@ -51,9 +51,39 @@ public sealed class BotConfig
         config.ResolvedYtDlp = ToolLocator.Resolve(config.YtDlpPath, "yt-dlp.exe");
         config.ResolvedFfmpeg = ToolLocator.Resolve(config.FfmpegPath, "ffmpeg.exe");
         config.ResolvedCookies = ToolLocator.ResolveOptional(config.CookiesFile);
+        config.ResolvedCookies ??= FindSecretCookies();
 
         return config;
     }
+
+    /// <summary>
+    /// No Render, os Secret Files aparecem em /etc/secrets/. Se não houver caminho
+    /// configurado, usa o cookies.txt que lá estiver.
+    /// </summary>
+    private static string? FindSecretCookies()
+    {
+        foreach (var candidate in SecretCookieCandidates)
+        {
+            try
+            {
+                if (File.Exists(candidate))
+                    return candidate;
+            }
+            catch
+            {
+                // Caminho inválido neste sistema - ignora.
+            }
+        }
+
+        return null;
+    }
+
+    public static IReadOnlyList<string> SecretCookieCandidates { get; } =
+    [
+        "/etc/secrets/cookies.txt",
+        "/etc/secrets/cookies",
+        "/run/secrets/cookies.txt",
+    ];
 
     /// <summary>Variáveis de ambiente ganham ao config.json (útil na nuvem).</summary>
     private static void ApplyEnvironment(BotConfig config)
