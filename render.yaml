@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: dbraz-music-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false          # metes o valor no dashboard (nunca no Git)
+      - key: DISCORD_GUILD_ID
+        value: "639128032501563403"
+      - key: TZ
+        value: Europe/Lisbon
+      # Ficheiro de cookies do YouTube (Render -> Secret Files -> /etc/secrets/cookies.txt)
+      - key: COOKIES_FILE
+        value: /etc/secrets/cookies.txt

@@ -1,0 +1,9 @@
+bin/
+obj/
+tools/
+natives/
+config.json
+bot.log
+.git/
+.vs/
+*.user

@@ -1,0 +1,9 @@
+bin/
+obj/
+tools/
+tmp/
+*.user
+.DS_Store
+config.json
+bot.log
+cookies.txt
