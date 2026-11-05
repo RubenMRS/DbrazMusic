@@ -18,6 +18,7 @@ while [ "$i" -lt 40 ]; do
     fi
     if ! kill -0 "$POT_PID" 2>/dev/null; then
         echo "[WARN] O PO token provider terminou - o /play pode falhar com 'not a bot'."
+        ldd /usr/local/bin/node 2>/dev/null | grep "not found" || true
         break
     fi
     i=$((i + 1))

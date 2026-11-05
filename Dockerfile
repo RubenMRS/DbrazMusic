@@ -20,10 +20,10 @@ FROM brainicism/bgutil-ytdlp-pot-provider:2.0.2 AS pot
 # ---- Runtime ----
 FROM mcr.microsoft.com/dotnet/runtime:10.0
 
-# ffmpeg + bibliotecas nativas da voz (opus, sodium)
+# ffmpeg + bibliotecas nativas da voz (opus, sodium) + libatomic (o node do PO provider precisa)
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ffmpeg libopus0 libsodium23 ca-certificates curl unzip tzdata \
+      ffmpeg libopus0 libsodium23 libatomic1 libstdc++6 ca-certificates curl unzip tzdata \
  && ln -sf /usr/lib/x86_64-linux-gnu/libopus.so.0 /usr/lib/x86_64-linux-gnu/libopus.so \
  && ln -sf /usr/lib/x86_64-linux-gnu/libsodium.so.23 /usr/lib/x86_64-linux-gnu/libsodium.so \
  && rm -rf /var/lib/apt/lists/*
