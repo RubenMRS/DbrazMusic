@@ -54,7 +54,9 @@ if (config.ResolvedFfmpeg == null)
 
 if (config.ResolvedCookies is { } cookies)
 {
-    Log.Ok($"Cookies do YouTube: {cookies}");
+    Log.Ok(config.CookiesDisabled
+        ? $"Cookies do YouTube: {cookies} (desativados por YTDLP_COOKIES)"
+        : $"Cookies do YouTube: {cookies}");
 }
 else
 {
@@ -321,7 +323,7 @@ static async Task RunChecksAsync(BotConfig config, string? configPath)
     Console.WriteLine($"              {await VersionAsync(config.ResolvedYtDlp, "--version")}");
     Console.WriteLine($"ffmpeg      : {config.ResolvedFfmpeg ?? "NÃO ENCONTRADO"}");
     Console.WriteLine($"              {await VersionAsync(config.ResolvedFfmpeg, "-version")}");
-    Console.WriteLine($"cookies     : {config.ResolvedCookies ?? "(nenhum)"}");
+    Console.WriteLine($"cookies     : {(config.UseCookies ? config.ResolvedCookies : "desativados")}");
     if (config.ExtraYtDlpArgs.Length > 0)
         Console.WriteLine($"yt-dlp args : {string.Join(' ', config.ExtraYtDlpArgs)}");
     Console.WriteLine();

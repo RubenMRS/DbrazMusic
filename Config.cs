@@ -23,6 +23,17 @@ public sealed class BotConfig
     public string? ResolvedCookies { get; private set; }
 
     /// <summary>
+    /// Fica a true quando o YouTube rejeita a sessão dos cookies (o Google roda-os
+    /// periodicamente). A partir daí o bot usa só o PO token.
+    /// </summary>
+    public bool CookiesDisabled { get; set; }
+
+    public bool UseCookies => !CookiesDisabled && ResolvedCookies != null;
+
+    /// <summary>Caminho dos cookies a passar ao yt-dlp, ou null se estiverem desativados.</summary>
+    public string? CookiesToPass => UseCookies ? ResolvedCookies : null;
+
+    /// <summary>
     /// Lê o config.json. Se o ficheiro não existir (por exemplo no Render),
     /// usa os valores por omissão e as variáveis de ambiente.
     /// </summary>
@@ -126,6 +137,13 @@ public sealed class BotConfig
 
         if (Read("COOKIES_FILE") is { } cookies)
             config.CookiesFile = cookies;
+
+        // YTDLP_COOKIES=0 desliga os cookies (útil quando o Google já os rodou).
+        if (Read("YTDLP_COOKIES") is { } cookiesFlag
+            && cookiesFlag is "0" or "false" or "no" or "off")
+        {
+            config.CookiesDisabled = true;
+        }
 
         // Permite afinar o yt-dlp na nuvem sem rebuild:
         //   YTDLP_ARGS=--extractor-args youtube:player_client=mweb,tv

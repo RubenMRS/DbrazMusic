@@ -110,6 +110,10 @@ Variáveis de ambiente suportadas: `DISCORD_TOKEN`, `DISCORD_GUILD_ID` (ou `GUIL
 `YTDLP_ARGS` aceita argumentos extra para o yt-dlp, o que permite afinar o comportamento
 sem rebuild (ex.: `--extractor-args "youtube:player_client=mweb,tv"`).
 
+`YTDLP_COOKIES=0` desliga os cookies. É o que se quer quando o Google já os rodou: uma
+sessão inválida a partir de um IP de datacenter faz o YouTube responder 403 e "Sign in to
+confirm you're not a bot". Com o PO token provider ativo, o bot funciona sem cookies.
+
 ### PO tokens (o que faz o `/play` funcionar no Render)
 
 Desde 2026 o YouTube não se contenta com cookies em IPs de datacenter: exige um

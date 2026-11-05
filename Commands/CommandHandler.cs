@@ -281,7 +281,7 @@ public static class CommandHandler
         var text = new StringBuilder();
         text.AppendLine("**Diagnóstico**");
         text.AppendLine($"yt-dlp: {config.ResolvedYtDlp ?? "NÃO ENCONTRADO"}");
-        text.AppendLine($"cookies: {config.ResolvedCookies ?? "(nenhum)"}");
+        text.AppendLine($"cookies: {(config.UseCookies ? config.ResolvedCookies : "desativados")}");
         text.AppendLine($"args extra: {(config.ExtraYtDlpArgs.Length == 0 ? "(nenhum)" : string.Join(' ', config.ExtraYtDlpArgs))}");
         text.AppendLine($"PO provider: {await PotStatusAsync()}");
         text.AppendLine();

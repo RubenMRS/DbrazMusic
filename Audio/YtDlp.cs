@@ -10,6 +10,7 @@ public static class YtDlp
 
     /// <summary>
     /// Resolve um link ou uma pesquisa em informação da música (sem descarregar áudio).
+    /// Se o YouTube rejeitar a sessão dos cookies, tenta outra vez sem eles.
     /// </summary>
     public static async Task<(TrackInfo? Info, string? Error)> ResolveAsync(
         string query, BotConfig config, CancellationToken cancellationToken = default)
@@ -22,6 +23,30 @@ public static class YtDlp
 
         var target = isUrl ? query : $"ytsearch1:{query}";
 
+        var result = await ResolveOnceAsync(ytDlp, target, config, cancellationToken);
+
+        if (result.Info != null || !config.UseCookies || !IsSessionRejected(result.Error))
+            return result;
+
+        // Cookies inválidos (o Google roda-os) fazem o YouTube tratar o pedido como
+        // suspeito. Sem eles, o PO token do bgutil é o suficiente.
+        Log.Warn("O YouTube rejeitou a sessão dos cookies; a tentar sem cookies.");
+        config.CookiesDisabled = true;
+
+        return await ResolveOnceAsync(ytDlp, target, config, cancellationToken);
+    }
+
+    /// <summary>Sinais de que o problema é a sessão (cookies), não o vídeo.</summary>
+    private static bool IsSessionRejected(string? error)
+        => error != null
+           && (error.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase)
+               || error.Contains("cookies are no longer valid", StringComparison.OrdinalIgnoreCase)
+               || error.Contains("HTTP Error 403", StringComparison.OrdinalIgnoreCase)
+               || error.Contains("not a bot", StringComparison.OrdinalIgnoreCase));
+
+    private static async Task<(TrackInfo? Info, string? Error)> ResolveOnceAsync(
+        string ytDlp, string target, BotConfig config, CancellationToken cancellationToken)
+    {
         var psi = new ProcessStartInfo
         {
             FileName = ytDlp,
@@ -120,7 +145,7 @@ public static class YtDlp
         yield return "--no-warnings";
         yield return "--no-playlist";
 
-        if (config.ResolvedCookies is { } cookies)
+        if (config.CookiesToPass is { } cookies)
         {
             yield return "--cookies";
             yield return cookies;
@@ -234,8 +259,24 @@ public static class YtDlp
     /// <summary>
     /// Teste completo ao yt-dlp (chamado pelo /diagnostico). Devolve as linhas que
     /// explicam o bloqueio: provider de PO tokens, cliente do YouTube e erro final.
+    /// Se os cookies forem rejeitados, repete sem eles.
     /// </summary>
     public static async Task<string> DiagnoseAsync(BotConfig config, string url)
+    {
+        var first = await DiagnoseOnceAsync(config, url);
+        var firstFailed = first.StartsWith("exit=1", StringComparison.Ordinal)
+                          || first.StartsWith("O yt-dlp não respondeu", StringComparison.Ordinal);
+
+        if (!config.UseCookies || !firstFailed || !IsSessionRejected(first))
+            return first;
+
+        config.CookiesDisabled = true;
+        var second = await DiagnoseOnceAsync(config, url);
+
+        return $"--- com cookies ---\n{first}\n\n--- sem cookies ---\n{second}";
+    }
+
+    private static async Task<string> DiagnoseOnceAsync(BotConfig config, string url)
     {
         if (config.ResolvedYtDlp is not { } ytDlp)
             return "yt-dlp não encontrado.";
