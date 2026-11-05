@@ -23,7 +23,23 @@ function Get-File($url, $destination) {
 }
 
 Write-Host "`n== yt-dlp ==" -ForegroundColor White
-Get-File "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" (Join-Path $tools "yt-dlp.exe")
+# Nightly: o YouTube muda mais depressa do que as versões estáveis.
+Get-File "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe" (Join-Path $tools "yt-dlp.exe")
+
+Write-Host "`n== deno (runtime JS para o yt-dlp) ==" -ForegroundColor White
+$denoExe = Join-Path $tools "deno.exe"
+if (-not (Test-Path $denoExe)) {
+    $denoZip = Join-Path $tmp "deno.zip"
+    Get-File "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip" $denoZip
+    Expand-Archive $denoZip -DestinationPath (Join-Path $tmp "deno") -Force
+    Copy-Item (Join-Path $tmp "deno" "deno.exe") $denoExe -Force
+    Remove-Item (Join-Path $tmp "deno") -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $denoZip -Force -ErrorAction SilentlyContinue
+    Write-Host "  [ok] deno.exe" -ForegroundColor DarkGray
+}
+else {
+    Write-Host "  [ok] deno.exe já existe" -ForegroundColor DarkGray
+}
 
 Write-Host "`n== ffmpeg ==" -ForegroundColor White
 $ffmpegExe = Join-Path $tools "ffmpeg.exe"

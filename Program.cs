@@ -517,18 +517,30 @@ static async Task<int> SelfTestAsync(BotConfig config, string[] args)
     Console.WriteLine($"Uploader : {info.Uploader}");
 
     using var pipeline = AudioPipeline.Start(info.Url, config);
-    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
     var buffer = new byte[3840];
     long total = 0;
+    var gotData = false;
     var stopwatch = Stopwatch.StartNew();
 
     try
     {
-        while (stopwatch.Elapsed < TimeSpan.FromSeconds(3))
+        while (true)
         {
             var read = await pipeline.Output.ReadAsync(buffer, timeout.Token);
             if (read <= 0) break;
+
+            if (!gotData)
+            {
+                // Só conta os 3 segundos depois de o áudio começar a chegar.
+                gotData = true;
+                stopwatch.Restart();
+            }
+
             total += read;
+
+            if (stopwatch.Elapsed >= TimeSpan.FromSeconds(3))
+                break;
         }
     }
     catch (OperationCanceledException)

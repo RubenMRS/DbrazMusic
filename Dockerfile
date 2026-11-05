@@ -22,10 +22,17 @@ RUN apt-get update \
  && ln -sf /usr/lib/x86_64-linux-gnu/libsodium.so.23 /usr/lib/x86_64-linux-gnu/libsodium.so \
  && rm -rf /var/lib/apt/lists/*
 
-# yt-dlp (binário oficial, não precisa de Python)
-RUN curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
+# yt-dlp (nightly: o YouTube muda mais depressa do que as versões estáveis; não precisa de Python)
+RUN curl -fsSL https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_linux \
       -o /usr/local/bin/yt-dlp \
  && chmod 0755 /usr/local/bin/yt-dlp
+
+# deno: runtime JS que o yt-dlp usa para desbloquear os formatos do YouTube
+RUN curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip \
+      -o /tmp/deno.zip \
+ && unzip -o /tmp/deno.zip -d /usr/local/bin \
+ && chmod 0755 /usr/local/bin/deno \
+ && rm -f /tmp/deno.zip
 
 # libdave (encriptação E2EE obrigatória da voz) para Linux x64
 RUN curl -fsSL https://github.com/discord/libdave/releases/download/v1.2.2/cpp/libdave-Linux-X64-boringssl.zip \

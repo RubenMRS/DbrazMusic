@@ -38,7 +38,12 @@ public sealed class AudioPipeline : IDisposable
         });
 
         // Drain dos erros para os processos não bloquearem.
-        _ = Task.Run(async () => await DrainAsync(_ffmpeg.StandardError));
+        _ = Task.Run(async () =>
+        {
+            var stderr = await DrainAsync(_ffmpeg.StandardError);
+            if (!string.IsNullOrWhiteSpace(stderr))
+                Log.Warn($"ffmpeg: {stderr}");
+        });
         _ = Task.Run(async () =>
         {
             var stderr = await DrainAsync(_ytDlp.StandardError);

@@ -114,8 +114,34 @@ public static class YtDlp
             yield return cookies;
         }
 
+        // O yt-dlp precisa de um runtime JS (deno) para desbloquear alguns formatos do YouTube.
+        if (FindDeno(config.ResolvedYtDlp) is { } deno)
+        {
+            yield return "--js-runtimes";
+            yield return $"deno:{deno}";
+        }
+
         foreach (var extra in config.ExtraYtDlpArgs)
             yield return extra;
+    }
+
+    private static string? FindDeno(string? ytDlpPath)
+    {
+        if (string.IsNullOrWhiteSpace(ytDlpPath))
+            return null;
+
+        var dir = Path.GetDirectoryName(ytDlpPath);
+        if (string.IsNullOrWhiteSpace(dir))
+            return null;
+
+        foreach (var name in new[] { "deno.exe", "deno" })
+        {
+            var candidate = Path.Combine(dir, name);
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        return null;
     }
 
     private static TimeSpan? GetDuration(JsonElement root)

@@ -147,8 +147,9 @@ esteja a tocar música. Para não morrer:
 
 | Problema | Solução |
 |---|---|
-| `/play` diz "Não consegui encontrar" | Atualiza o yt-dlp: `tools\yt-dlp.exe -U` |
+| `/play` diz "Não consegui encontrar" | Atualiza o yt-dlp: `tools\yt-dlp.exe --update-to nightly@latest` (o `setup.ps1` já traz o nightly) |
 | YouTube pede login / "Sign in to confirm you're not a bot" | Exporta os cookies do browser para `cookies.txt` (extensão *Get cookies.txt LOCALLY*) e indica o caminho em `cookiesFile` no `config.json` |
+| "cookies are no longer valid" | O Google roda os cookies; exporta outra vez e substitui. Usa um perfil de browser só para isto |
 | Bot entra mas não se ouve nada | Confirma a permissão **Speak** no canal e vê os logs na consola |
 | Comandos slash não aparecem | Preenche o `guildId` e reinicia; no cliente Discord faz `Ctrl+R` |
 | "Token inválido" | Copia outra vez em Bot → Reset Token (não uses o Client Secret) |
@@ -156,8 +157,10 @@ esteja a tocar música. Para não morrer:
 
 ## Notas
 
-- Projeto pensado para correr no teu PC. Evita VPS/datacenter: o YouTube bloqueia
-  frequentemente esses IPs.
-- Em 2026 o Discord exige encriptação E2EE (DAVE) na voz; o `libdave.dll` já vem incluído.
+- Em 2026 o yt-dlp precisa de um runtime JavaScript (**deno**) para o YouTube devolver
+  os formatos de áudio. O `setup.ps1` instala `tools\deno.exe` e a imagem Docker também o traz.
+- O binário do yt-dlp é o **nightly**: o YouTube muda mais depressa do que as versões estáveis.
+- Em 2026 o Discord exige encriptação E2EE (DAVE) na voz; o `libdave.dll` já vem incluído
+  (compilado com o patch do PR #3288, porque a release 3.20.2 do Discord.Net tem o bug).
 - Usa isto apenas para uso pessoal e respeita os Termos de Serviço do YouTube.
 - O `config.json` contém o token do bot — não o partilhes.
