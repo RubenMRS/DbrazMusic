@@ -99,7 +99,11 @@ public static class CommandHandler
         player.SetChannel(voiceChannel.Id, command.Channel.Id);
         Log.Info($"Pedido: \"{query.Trim()}\" -> #{voiceChannel.Name}");
 
-        var (info, error) = await YtDlp.ResolveAsync(query.Trim(), config);
+        var (info, error) = await YtDlp.ResolveAsync(query.Trim(), config, async text =>
+        {
+            try { await command.FollowupAsync(text, ephemeral: true); }
+            catch (Exception ex) { Log.Warn($"Falha a avisar do bloqueio: {ex.Message}"); }
+        });
 
         if (info == null)
         {

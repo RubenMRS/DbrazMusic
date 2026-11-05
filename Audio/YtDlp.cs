@@ -6,7 +6,8 @@ namespace MusicBot.Audio;
 
 public static class YtDlp
 {
-    private static readonly TimeSpan ResolveTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan ResolveTimeout = TimeSpan.FromSeconds(35);
+    private static readonly TimeSpan TotalResolveTimeout = TimeSpan.FromSeconds(120);
 
     /// <summary>Clientes do YouTube a experimentar quando o habitual é bloqueado.</summary>
     private static readonly string[] FallbackClients = ["web_embedded", "mweb", "android", "tv"];
@@ -14,9 +15,12 @@ public static class YtDlp
     /// <summary>
     /// Resolve um link ou uma pesquisa em informação da música (sem descarregar áudio).
     /// Se o YouTube bloquear, tenta sem cookies e depois com outros clientes.
+    /// <paramref name="progress"/> recebe um aviso quando a primeira tentativa falha
+    /// (para o utilizador não ficar a olhar para "a pensar...").
     /// </summary>
     public static async Task<(TrackInfo? Info, string? Error)> ResolveAsync(
-        string query, BotConfig config, CancellationToken cancellationToken = default)
+        string query, BotConfig config, Func<string, Task>? progress = null,
+        CancellationToken cancellationToken = default)
     {
         if (config.ResolvedYtDlp is not { } ytDlp)
             return (null, "yt-dlp não encontrado. Corre o setup.ps1 ou define o caminho no config.json.");
@@ -26,9 +30,15 @@ public static class YtDlp
 
         var target = isUrl ? query : $"ytsearch1:{query}";
 
-        var result = await ResolveOnceAsync(ytDlp, target, config, config.PlayerClient, cancellationToken);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TotalResolveTimeout);
+
+        var result = await ResolveOnceAsync(ytDlp, target, config, config.PlayerClient, deadline.Token);
         if (result.Info != null || !IsSessionRejected(result.Error))
             return result;
+
+        if (progress != null)
+            await progress("⏳ O YouTube bloqueou o pedido. A tentar alternativas (pode demorar ~1 min)…");
 
         // 2) Cookies inválidos (o Google roda-os) fazem o YouTube tratar o pedido
         //    como suspeito. Sem eles, o PO token do bgutil é o suficiente.
@@ -37,7 +47,7 @@ public static class YtDlp
             Log.Warn("O YouTube rejeitou a sessão dos cookies; a tentar sem cookies.");
             config.CookiesDisabled = true;
 
-            result = await ResolveOnceAsync(ytDlp, target, config, config.PlayerClient, cancellationToken);
+            result = await ResolveOnceAsync(ytDlp, target, config, config.PlayerClient, deadline.Token);
             if (result.Info != null)
                 return result;
         }
@@ -50,7 +60,7 @@ public static class YtDlp
 
             Log.Info($"A tentar o cliente do YouTube \"{client}\"...");
 
-            var attempt = await ResolveOnceAsync(ytDlp, target, config, client, cancellationToken);
+            var attempt = await ResolveOnceAsync(ytDlp, target, config, client, deadline.Token);
             if (attempt.Info != null)
             {
                 config.PlayerClient = client;
