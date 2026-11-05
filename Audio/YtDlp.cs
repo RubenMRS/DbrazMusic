@@ -6,11 +6,11 @@ namespace MusicBot.Audio;
 
 public static class YtDlp
 {
-    private static readonly TimeSpan ResolveTimeout = TimeSpan.FromSeconds(75);
-    private static readonly TimeSpan TotalResolveTimeout = TimeSpan.FromSeconds(300);
+    private static readonly TimeSpan ResolveTimeout = TimeSpan.FromSeconds(180);
+    private static readonly TimeSpan TotalResolveTimeout = TimeSpan.FromSeconds(600);
 
     /// <summary>Clientes do YouTube a experimentar quando o habitual é bloqueado.</summary>
-    private static readonly string[] FallbackClients = ["web_embedded", "mweb", "android", "tv"];
+    private static readonly string[] FallbackClients = ["web_embedded"];
 
     /// <summary>
     /// Resolve um link ou uma pesquisa em informação da música (sem descarregar áudio).
