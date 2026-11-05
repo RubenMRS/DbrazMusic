@@ -77,7 +77,11 @@ public static class YtDlp
             if (diagnostics.Length > 0)
                 Log.Warn($"Diagnóstico do yt-dlp:\n{diagnostics}");
 
-            return (null, ShortError(stderr));
+            var message = ShortError(stderr);
+            if (diagnostics.Length > 0)
+                message += $"\n```\n{Trim(diagnostics, 900)}\n```";
+
+            return (null, message);
         }
 
         var jsonLine = stdout
@@ -199,12 +203,92 @@ public static class YtDlp
             .Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(l => l.Trim())
             .Where(l => l.Length > 0)
+            .ToArray();
+
+        // Com -v o yt-dlp imprime o traceback todo; a razão real está na linha "ERROR:".
+        var error = lines.FirstOrDefault(l => l.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase));
+        if (error != null)
+            return error["ERROR:".Length..].Trim();
+
+        var useful = lines
+            .Where(l => !IsTracebackLine(l))
             .TakeLast(3)
             .ToArray();
 
-        return lines.Length > 0
-            ? string.Join(" | ", lines).Replace("ERROR: ", "", StringComparison.OrdinalIgnoreCase)
+        return useful.Length > 0
+            ? string.Join(" | ", useful)
             : "Erro desconhecido no yt-dlp.";
+    }
+
+    private static bool IsTracebackLine(string line)
+        => line.StartsWith("File \"", StringComparison.Ordinal)
+           || line.StartsWith("Traceback", StringComparison.OrdinalIgnoreCase)
+           || line.Contains("in raise_no_formats", StringComparison.Ordinal)
+           || line.StartsWith("^^^", StringComparison.Ordinal)
+           || line.StartsWith("~~~", StringComparison.Ordinal);
+
+    /// <summary>Corta o texto a partir do início ou do fim, conforme o que for mais útil.</summary>
+    private static string Trim(string text, int max)
+        => text.Length <= max ? text : text[^max..];
+
+    /// <summary>
+    /// Teste completo ao yt-dlp (chamado pelo /diagnostico). Devolve as linhas que
+    /// explicam o bloqueio: provider de PO tokens, cliente do YouTube e erro final.
+    /// </summary>
+    public static async Task<string> DiagnoseAsync(BotConfig config, string url)
+    {
+        if (config.ResolvedYtDlp is not { } ytDlp)
+            return "yt-dlp não encontrado.";
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = ytDlp,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+
+        foreach (var arg in BuildBaseArgs(config))
+            psi.ArgumentList.Add(arg);
+
+        psi.ArgumentList.Add("-v");
+        psi.ArgumentList.Add("--simulate");
+        psi.ArgumentList.Add("--skip-download");
+        psi.ArgumentList.Add(url);
+
+        using var process = new Process { StartInfo = psi };
+        try
+        {
+            process.Start();
+        }
+        catch (Exception ex)
+        {
+            return $"Não consegui executar o yt-dlp: {ex.Message}";
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+
+        try
+        {
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            var stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
+            await process.WaitForExitAsync(timeout.Token);
+            await stdoutTask;
+
+            var stderr = await stderrTask;
+            var diagnostics = Diagnostics(stderr);
+            var header = $"exit={process.ExitCode}";
+
+            return diagnostics.Length > 0 ? $"{header}\n{diagnostics}" : $"{header}\n(sem linhas relevantes)";
+        }
+        catch (OperationCanceledException)
+        {
+            TryKill(process);
+            return "O yt-dlp não respondeu em 90 s.";
+        }
     }
 
     private static void TryKill(Process process)

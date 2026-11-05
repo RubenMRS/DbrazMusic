@@ -35,6 +35,9 @@ public static class CommandHandler
                 case "leave":
                     await StopAsync(command, players);
                     break;
+                case "diagnostico":
+                    await DiagnoseAsync(command, config);
+                    break;
                 default:
                     await RespondAsync(command, "Comando desconhecido.", ephemeral: true);
                     break;
@@ -101,7 +104,11 @@ public static class CommandHandler
         if (info == null)
         {
             Log.Warn($"Não resolvi \"{query}\": {error}");
-            await command.FollowupAsync($"❌ Não consegui encontrar essa música.\n`{error}`", ephemeral: true);
+            var reason = error ?? "Erro desconhecido no yt-dlp.";
+            var details = reason.Length > 1700 ? reason[..1700] : reason;
+            await command.FollowupAsync(
+                $"❌ Não consegui encontrar essa música.\n```\n{details}\n```",
+                ephemeral: true);
             return;
         }
 
@@ -254,6 +261,56 @@ public static class CommandHandler
 
     private static GuildPlayer? GetPlayer(SocketSlashCommand command, PlayerManager players)
         => command.GuildId is { } guildId && guildId != 0 ? players.TryGet(guildId) : null;
+
+    /// <summary>
+    /// Corre um teste completo ao yt-dlp e mostra o resultado só a quem pediu.
+    /// Serve para diagnosticar bloqueios do YouTube sem precisar dos logs do Render.
+    /// </summary>
+    private static async Task DiagnoseAsync(SocketSlashCommand command, BotConfig config)
+    {
+        try
+        {
+            await command.DeferAsync(ephemeral: true);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Interação expirada antes do /diagnostico ({ex.Message}).");
+            return;
+        }
+
+        var text = new StringBuilder();
+        text.AppendLine("**Diagnóstico**");
+        text.AppendLine($"yt-dlp: {config.ResolvedYtDlp ?? "NÃO ENCONTRADO"}");
+        text.AppendLine($"cookies: {config.ResolvedCookies ?? "(nenhum)"}");
+        text.AppendLine($"args extra: {(config.ExtraYtDlpArgs.Length == 0 ? "(nenhum)" : string.Join(' ', config.ExtraYtDlpArgs))}");
+        text.AppendLine($"PO provider: {await PotStatusAsync()}");
+        text.AppendLine();
+        text.AppendLine(await YtDlp.DiagnoseAsync(config, "https://www.youtube.com/watch?v=dQw4w9WgXcQ"));
+
+        var message = text.ToString();
+        if (message.Length > 1900)
+            message = message[..1900] + "\n…";
+
+        await command.FollowupAsync($"```\n{message}\n```", ephemeral: true);
+    }
+
+    private static async Task<string> PotStatusAsync()
+    {
+        var url = Environment.GetEnvironmentVariable("POT_PROVIDER_URL") ?? "http://127.0.0.1:4416";
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            var response = await http.GetAsync($"{url.TrimEnd('/')}/ping");
+            return response.IsSuccessStatusCode
+                ? $"OK ({url})"
+                : $"respondeu {(int)response.StatusCode} ({url})";
+        }
+        catch (Exception ex)
+        {
+            return $"indisponível ({ex.GetType().Name})";
+        }
+    }
 
     /// <summary>
     /// Lê o canal de voz do utilizador. Se o Discord ainda não enviou os dados do servidor,

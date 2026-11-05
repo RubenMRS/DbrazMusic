@@ -42,6 +42,10 @@ public static class CommandRegistrar
             new SlashCommandBuilder()
                 .WithName("leave")
                 .WithDescription("Sai do canal de voz"),
+
+            new SlashCommandBuilder()
+                .WithName("diagnostico")
+                .WithDescription("Testa o yt-dlp e mostra o resultado (só tu vês)"),
         };
 
         if (config.GuildId != 0)

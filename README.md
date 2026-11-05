@@ -15,6 +15,7 @@ e ele entra no teu canal de voz e toca. Feito em **C# / .NET 10** com `Discord.N
 | `/nowplaying` | Mostra a música atual |
 | `/stop` | Para tudo, limpa a fila e sai do canal |
 | `/leave` | Sai do canal de voz |
+| `/diagnostico` | Testa o yt-dlp/PO tokens e mostra o resultado (só tu vês) |
 
 ## Como pôr a funcionar
 
