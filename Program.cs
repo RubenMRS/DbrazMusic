@@ -62,6 +62,8 @@ else
              "adiciona o Secret File cookies.txt (Render: /etc/secrets/cookies.txt).");
 }
 
+await CheckPotProviderAsync();
+
 StartHealthServerIfNeeded();
 
 var socketConfig = new DiscordSocketConfig
@@ -193,6 +195,32 @@ try { await client.LogoutAsync(); } catch { /* ignore */ }
 Log.Ok("Até à próxima!");
 return 0;
 
+/// <summary>
+/// Verifica se o gerador de PO tokens (bgutil) está a responder. É ele que evita
+/// o "Sign in to confirm you're not a bot" em IPs de datacenter (Render).
+/// </summary>
+static async Task CheckPotProviderAsync()
+{
+    var url = Environment.GetEnvironmentVariable("POT_PROVIDER_URL") ?? "http://127.0.0.1:4416";
+
+    try
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        var response = await http.GetAsync($"{url.TrimEnd('/')}/ping");
+        var body = (await response.Content.ReadAsStringAsync()).Trim();
+
+        if (response.IsSuccessStatusCode)
+            Log.Ok($"PO token provider a responder em {url} {body}");
+        else
+            Log.Warn($"PO token provider respondeu {(int)response.StatusCode} em {url}.");
+    }
+    catch (Exception ex)
+    {
+        Log.Warn($"PO token provider indisponível em {url} ({ex.GetType().Name}). " +
+                 "Sem ele o YouTube bloqueia IPs de datacenter com 'not a bot'.");
+    }
+}
+
 static void StartHealthServerIfNeeded()
 {
     if (!int.TryParse(Environment.GetEnvironmentVariable("PORT"), out var port) || port <= 0)
@@ -294,6 +322,8 @@ static async Task RunChecksAsync(BotConfig config, string? configPath)
     Console.WriteLine($"ffmpeg      : {config.ResolvedFfmpeg ?? "NÃO ENCONTRADO"}");
     Console.WriteLine($"              {await VersionAsync(config.ResolvedFfmpeg, "-version")}");
     Console.WriteLine($"cookies     : {config.ResolvedCookies ?? "(nenhum)"}");
+    if (config.ExtraYtDlpArgs.Length > 0)
+        Console.WriteLine($"yt-dlp args : {string.Join(' ', config.ExtraYtDlpArgs)}");
     Console.WriteLine();
 
     string[] natives = ["libsodium.dll", "opus.dll", "libdave.dll"];

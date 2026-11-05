@@ -104,7 +104,10 @@ O projeto já traz `Dockerfile` e `render.yaml`, prontos para o Render.
 | PO tokens gerados pelo teu IP | servidor **bgutil** dentro do contentor (`127.0.0.1:4416`) |
 
 Variáveis de ambiente suportadas: `DISCORD_TOKEN`, `DISCORD_GUILD_ID` (ou `GUILD_ID`),
-`YTDLP_PATH`, `FFMPEG_PATH`, `COOKIES_FILE`, `PORT` (usada pelo Render).
+`YTDLP_PATH`, `FFMPEG_PATH`, `COOKIES_FILE`, `YTDLP_ARGS`, `PORT` (usada pelo Render).
+
+`YTDLP_ARGS` aceita argumentos extra para o yt-dlp, o que permite afinar o comportamento
+sem rebuild (ex.: `--extractor-args "youtube:player_client=mweb,tv"`).
 
 ### PO tokens (o que faz o `/play` funcionar no Render)
 

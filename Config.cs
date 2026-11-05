@@ -127,6 +127,11 @@ public sealed class BotConfig
         if (Read("COOKIES_FILE") is { } cookies)
             config.CookiesFile = cookies;
 
+        // Permite afinar o yt-dlp na nuvem sem rebuild:
+        //   YTDLP_ARGS=--extractor-args youtube:player_client=mweb,tv
+        if (Read("YTDLP_ARGS") is { } extra)
+            config.ExtraYtDlpArgs = SplitArgs(extra);
+
         var guild = Read("DISCORD_GUILD_ID") ?? Read("GUILD_ID");
         if (guild != null && ulong.TryParse(guild, out var guildId))
             config.GuildId = guildId;
@@ -136,6 +141,47 @@ public sealed class BotConfig
     {
         var value = Environment.GetEnvironmentVariable(name);
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    /// <summary>Divide uma linha de argumentos, respeitando aspas simples e duplas.</summary>
+    private static string[] SplitArgs(string line)
+    {
+        var args = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var quote = '\0';
+
+        foreach (var c in line)
+        {
+            if (quote != '\0')
+            {
+                if (c == quote) quote = '\0';
+                else current.Append(c);
+                continue;
+            }
+
+            if (c is '"' or '\'')
+            {
+                quote = c;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(c))
+            {
+                if (current.Length > 0)
+                {
+                    args.Add(current.ToString());
+                    current.Clear();
+                }
+                continue;
+            }
+
+            current.Append(c);
+        }
+
+        if (current.Length > 0)
+            args.Add(current.ToString());
+
+        return [.. args];
     }
 
     public string EffectiveToken =>

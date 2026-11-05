@@ -38,6 +38,8 @@ public static class YtDlp
 
         psi.ArgumentList.Add("--dump-json");
         psi.ArgumentList.Add("--skip-download");
+        // Verbose só nos metadados: é o que mostra o estado dos PO tokens e do cliente usado.
+        psi.ArgumentList.Add("-v");
         psi.ArgumentList.Add(target);
 
         using var process = new Process { StartInfo = psi };
@@ -70,7 +72,13 @@ public static class YtDlp
         var stderr = await stderrTask;
 
         if (process.ExitCode != 0)
+        {
+            var diagnostics = Diagnostics(stderr);
+            if (diagnostics.Length > 0)
+                Log.Warn($"Diagnóstico do yt-dlp:\n{diagnostics}");
+
             return (null, ShortError(stderr));
+        }
 
         var jsonLine = stdout
             .Split('\n', StringSplitOptions.RemoveEmptyEntries)
@@ -159,6 +167,31 @@ public static class YtDlp
         => root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+
+    /// <summary>
+    /// Filtra o stderr verboso do yt-dlp para as linhas que interessam quando o
+    /// YouTube bloqueia (PO token, cliente usado, cookies, erro final).
+    /// </summary>
+    private static string Diagnostics(string stderr)
+    {
+        string[] keywords =
+        [
+            "[pot", "po token", "po_token", "sign in", "player_client", "player client",
+            "[client", "cookie", "error", "warning", "bgutil", "visitor",
+        ];
+
+        var lines = stderr
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0)
+            .Where(l => keywords.Any(k => l.Contains(k, StringComparison.OrdinalIgnoreCase)))
+            .Distinct()
+            .TakeLast(30)
+            .ToArray();
+
+        var text = string.Join("\n", lines);
+        return text.Length > 4000 ? text[^4000..] : text;
+    }
 
     private static string ShortError(string stderr)
     {
