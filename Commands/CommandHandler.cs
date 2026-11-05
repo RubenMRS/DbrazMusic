@@ -288,6 +288,7 @@ public static class CommandHandler
         text.AppendLine($"cookies: {(config.UseCookies ? config.ResolvedCookies : "desativados")}");
         text.AppendLine($"args extra: {(config.ExtraYtDlpArgs.Length == 0 ? "(nenhum)" : string.Join(' ', config.ExtraYtDlpArgs))}");
         text.AppendLine($"PO provider: {await PotStatusAsync()}");
+        text.AppendLine($"teste de arranque: {config.ProbeResult ?? "(ainda a correr)"}");
         text.AppendLine($"PO token: {await PotTokenTimingAsync()}");
         text.AppendLine();
         text.AppendLine(await YtDlp.DiagnoseAsync(config, "https://www.youtube.com/watch?v=dQw4w9WgXcQ"));

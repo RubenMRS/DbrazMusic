@@ -66,6 +66,10 @@ else
 
 await CheckPotProviderAsync();
 
+// Em segundo plano para não atrasar o arranque: descobre se os cookies são
+// necessários e qual o cliente do YouTube que funciona.
+_ = Task.Run(() => YtDlp.ProbeWithoutCookiesAsync(config));
+
 StartHealthServerIfNeeded();
 
 var socketConfig = new DiscordSocketConfig

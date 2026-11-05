@@ -41,6 +41,9 @@ public sealed class BotConfig
     /// <summary>Cliente do YouTube que já se sabe funcionar neste servidor.</summary>
     public string? PlayerClient { get; set; }
 
+    /// <summary>Resultado do teste automático feito no arranque, para o /diagnostico.</summary>
+    public string? ProbeResult { get; set; }
+
     /// <summary>
     /// Lê o config.json. Se o ficheiro não existir (por exemplo no Render),
     /// usa os valores por omissão e as variáveis de ambiente.
