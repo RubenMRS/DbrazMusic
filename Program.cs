@@ -293,6 +293,7 @@ static async Task RunChecksAsync(BotConfig config, string? configPath)
     Console.WriteLine($"              {await VersionAsync(config.ResolvedYtDlp, "--version")}");
     Console.WriteLine($"ffmpeg      : {config.ResolvedFfmpeg ?? "NÃO ENCONTRADO"}");
     Console.WriteLine($"              {await VersionAsync(config.ResolvedFfmpeg, "-version")}");
+    Console.WriteLine($"cookies     : {config.ResolvedCookies ?? "(nenhum)"}");
     Console.WriteLine();
 
     string[] natives = ["libsodium.dll", "opus.dll", "libdave.dll"];

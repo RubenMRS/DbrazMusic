@@ -51,9 +51,39 @@ public sealed class BotConfig
         config.ResolvedYtDlp = ToolLocator.Resolve(config.YtDlpPath, "yt-dlp.exe");
         config.ResolvedFfmpeg = ToolLocator.Resolve(config.FfmpegPath, "ffmpeg.exe");
         config.ResolvedCookies = ToolLocator.ResolveOptional(config.CookiesFile);
-        config.ResolvedCookies ??= FindSecretCookies();
+        config.ResolvedCookies = MakeWritableCookieCopy(config.ResolvedCookies ?? FindSecretCookies());
 
         return config;
+    }
+
+    /// <summary>
+    /// O yt-dlp abre o ficheiro de cookies em escrita para guardar rotações, e no Render
+    /// /etc/secrets é só de leitura. Se não der para escrever, copia-o para uma pasta temporária.
+    /// </summary>
+    private static string? MakeWritableCookieCopy(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        try
+        {
+            using var probe = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+            return path;
+        }
+        catch
+        {
+            try
+            {
+                var target = Path.Combine(Path.GetTempPath(), "cookies.txt");
+                File.Copy(path, target, overwrite: true);
+                return target;
+            }
+            catch
+            {
+                // Se nem copiar der, usa o original (pode falhar no yt-dlp, mas não é pior).
+                return path;
+            }
+        }
     }
 
     /// <summary>
