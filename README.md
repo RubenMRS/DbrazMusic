@@ -90,102 +90,77 @@ DiscordMusicBot/
 └── run.ps1 / iniciar.bat    arrancar
 ```
 
-## Na nuvem (Render 24/7)
+## Como pôr a funcionar no PC
 
-O projeto já traz `Dockerfile` e `render.yaml`, prontos para o Render.
-
-### Diferenças do PC
-
-| No PC | Na nuvem |
-|---|---|
-| `yt-dlp.exe` / `ffmpeg.exe` em `tools\` | instalados na imagem (`PATH`) |
-| `libsodium.dll` / `opus.dll` / `libdave.dll` em `natives\` | pacotes `libsodium23`/`libopus0` + `libdave.so` oficial |
-| token no `config.json` | `DISCORD_TOKEN` (variável de ambiente) |
-| logs só na consola | consola do Render + `bot.log` (efémero) |
-| PO tokens gerados pelo teu IP | servidor **bgutil** dentro do contentor (`127.0.0.1:4416`) |
-
-Variáveis de ambiente suportadas: `DISCORD_TOKEN`, `DISCORD_GUILD_ID` (ou `GUILD_ID`),
-`YTDLP_PATH`, `FFMPEG_PATH`, `COOKIES_FILE`, `YTDLP_ARGS`, `PORT` (usada pelo Render).
-
-`YTDLP_ARGS` aceita argumentos extra para o yt-dlp, o que permite afinar o comportamento
-sem rebuild (ex.: `--extractor-args "youtube:player_client=mweb,tv"`).
-
-`YTDLP_COOKIES=0` desliga os cookies. É o que se quer quando o Google já os rodou: uma
-sessão inválida a partir de um IP de datacenter faz o YouTube responder 403 e "Sign in to
-confirm you're not a bot". Com o PO token provider ativo, o bot funciona sem cookies.
-
-### PO tokens (o que faz o `/play` funcionar no Render)
-
-Desde 2026 o YouTube não se contenta com cookies em IPs de datacenter: exige um
-**PO token** (proof-of-origin). A imagem arranca o servidor
-[bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)
-em `127.0.0.1:4416` e instala o plugin correspondente do yt-dlp. No arranque deves ver:
-
-```
-[ OK ] PO token provider (bgutil) em 127.0.0.1:4416
-```
-
-Para confirmar que o yt-dlp o está a usar: `yt-dlp -v <url>` mostra
-`PO Token Providers: bgutil:http-2.0.2 (external)`.
-
-
-### Passos
-
-1. **Git + GitHub** (o `config.json` fica de fora — contém o token):
+1. **Instalar dependências** (correr uma vez):
    ```powershell
-   git init
-   git add .
-   git commit -m "bot"
-   git remote add origin https://github.com/<user>/<repo>.git
-   git push -u origin main
+   .\setup.ps1
    ```
-2. No Render: **New → Blueprint** → escolhe o repositório (ele lê o `render.yaml`).
-3. No serviço criado → **Environment** → `DISCORD_TOKEN` = o token do bot.
-4. (Recomendado) **Secret Files** → `cookies.txt` com os cookies do YouTube
-   (o Render monta em `/etc/secrets/cookies.txt`, que é o que o `render.yaml` já aponta).
-   Sem isto, o YouTube costuma bloquear IPs de datacenter com "Sign in to confirm you're not a bot".
-5. Deploy. Testa `https://<app>.onrender.com/health` → deve devolver
-   `{"status":"ok","uptime":...}`.
+   Isto descarrega o `yt-dlp` (nightly), o `ffmpeg`, o `deno` (runtime JS que o YouTube exige em 2026) e as bibliotecas nativas da voz (`natives\`).
 
-### Keep-alive ("watchbot")
+2. **Criar o bot no Discord** → [Discord Developer Portal](https://discord.com/developers/applications):
+   - Aplicação → Bot → token
+   - Desativar **Message Content Intent** (não é preciso; usamos só comandos slash)
+   - Ativar **Server Members Intent** e **Presence Intent** se quiseres (opcional)
 
-O plano free do Render **adormece ao fim de 15 min sem tráfego HTTP** — mesmo que o bot
-esteja a tocar música. Para não morrer:
+3. **Configurar**: criar `config.json` (o ficheiro de exemplo não é partilhado com o token):
+   ```json
+   {
+     "token": "SEU_TOKEN_DO_DISCORD",
+     "guildId": 639128032501563403,
+     "cookiesFile": "C:\\caminho\\para\\cookies.txt"
+   }
+   ```
+   - `guildId`: o teu servidor (comandos slash aparecem imediatamente). Põe `0` para comandos globais (demoram até 1h).
+   - `cookiesFile`: opcional. Exporta com a extensão **"Get cookies.txt LOCALLY"** no YouTube se o `/play` disser "Sign in to confirm you're not a bot".
 
-- Cria um monitor grátis no [cron-job.org](https://cron-job.org) ou [UptimeRobot](https://uptimerobot.com)
-  a chamar `https://<app>.onrender.com/health` **a cada 10–14 minutos**.
-- Se o processo rebentar, o Render reinicia o contentor sozinho; o ping seguinte
-  também o acorda. Não é preciso um "watchdog" dentro do bot.
+4. **Arrancar**:
+   ```powershell
+   dotnet run -c Release
+   # ou
+   .\run.ps1
+   ```
 
-### Limites honestos do plano free
+5. No Discord, ir ao teu servidor e usar `/play <link ou pesquisa>`.
 
-- **750 horas/mês** de instância (um mês tem ~730 h) — dá para um serviço sempre ligado, mas não dois.
-- **512 MB de RAM e 0,1 CPU**: chega para uma música, mas arranques e `yt-dlp` podem ser lentos.
-- **Disco efémero**: `bot.log` e caches desaparecem em cada deploy/restart.
-- **O Render não garante UDP de saída** (a voz do Discord usa UDP). Se o bot entrar no canal
-  mas ninguém ouvir nada, vê no `bot.log` a latência UDP; se ficar em `UDP 0 ms`,
-  a voz está bloqueada e é melhor usar um VPS (ex.: Oracle Cloud Always Free, Fly.io) —
-  o mesmo `Dockerfile` funciona lá sem alterações.
+### Variáveis de ambiente (opcionais, sob o config.json)
 
-## Problemas comuns
+| Variável | O que faz |
+|---|---|
+| `DISCORD_TOKEN` | Token do bot (alternativa ao `config.json`) |
+| `DISCORD_GUILD_ID` | ID do servidor para comandos slash instantâneos |
+| `COOKIES_FILE` | Caminho para o `cookies.txt` do YouTube |
+| `YTDLP_ARGS` | Argumentos extra para o yt-dlp, ex. `--extractor-args "youtube:player_client=mweb,tv"` |
+| `YTDLP_COOKIES=0` | Desliga os cookies (útil se o Google já os rodou) |
+
+### Comandos
+
+| Comando | O que faz |
+|---|---|
+| `/play <link ou pesquisa>` | Entra no teu canal de voz e toca (ou adiciona à fila) |
+| `/skip` | Salta para a música seguinte |
+| `/pause` / `/resume` | Pausa / continua |
+| `/queue` | Mostra a fila |
+| `/nowplaying` | Mostra a música atual |
+| `/stop` | Para tudo, limpa a fila e sai do canal |
+| `/leave` | Sai do canal de voz |
+| `/diagnostico` | Testa o yt-dlp e mostra o resultado (só tu vês) |
+
+### Resolver problemas
 
 | Problema | Solução |
 |---|---|
-| `/play` diz "Não consegui encontrar" | Atualiza o yt-dlp: `tools\yt-dlp.exe --update-to nightly@latest` (o `setup.ps1` já traz o nightly) |
-| YouTube pede login / "Sign in to confirm you're not a bot" | Exporta os cookies do browser para `cookies.txt` (extensão *Get cookies.txt LOCALLY*) e indica o caminho em `cookiesFile` no `config.json` |
-| "cookies are no longer valid" | O Google roda os cookies; exporta outra vez e substitui. Usa um perfil de browser só para isto |
-| Mesmo com cookies: "Sign in to confirm you're not a bot" | IP de datacenter: confirma no log de arranque `[ OK ] PO token provider (bgutil)`. Se falhar, vê o erro do node acima dessa linha |
-| Bot entra mas não se ouve nada | Confirma a permissão **Speak** no canal e vê os logs na consola |
-| Comandos slash não aparecem | Preenche o `guildId` e reinicia; no cliente Discord faz `Ctrl+R` |
+| `/play` diz "Não consegui encontrar" | Atualiza o yt-dlp: `tools\yt-dlp.exe --update-to nightly@latest` |
+| "Sign in to confirm you're not a bot" | Exporta cookies do YouTube para `cookies.txt` e indica o caminho em `cookiesFile` (ou `COOKIES_FILE`) |
+| "cookies are no longer valid" | O Google rodou os cookies; exporta outra vez. Ou ponha `YTDLP_COOKIES=0` para ignorá-los |
+| Comandos slash não aparecem | Põe o `guildId` e reinicia o bot; no cliente Discord faz `Ctrl+R` |
 | "Token inválido" | Copia outra vez em Bot → Reset Token (não uses o Client Secret) |
 | Bot não entra no canal | Tem de estar no mesmo servidor, ter **Connect** e tu tens de estar num canal de voz |
 
-## Notas
+### Notas
 
-- Em 2026 o yt-dlp precisa de um runtime JavaScript (**deno**) para o YouTube devolver
-  os formatos de áudio. O `setup.ps1` instala `tools\deno.exe` e a imagem Docker também o traz.
+- Em 2026 o yt-dlp precisa de um runtime JavaScript (**deno**) para o YouTube devolver os formatos de áudio. O `setup.ps1` instala `tools\deno.exe`.
 - O binário do yt-dlp é o **nightly**: o YouTube muda mais depressa do que as versões estáveis.
-- Em 2026 o Discord exige encriptação E2EE (DAVE) na voz; o `libdave.dll` já vem incluído
-  (compilado com o patch do PR #3288, porque a release 3.20.2 do Discord.Net tem o bug).
+- Em 2026 o Discord exige encriptação E2EE (DAVE) na voz; o `libdave.dll` já vem incluído.
 - Usa isto apenas para uso pessoal e respeita os Termos de Serviço do YouTube.
 - O `config.json` contém o token do bot — não o partilhes.

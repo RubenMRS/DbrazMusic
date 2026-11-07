@@ -110,41 +110,6 @@ public static class YtDlp
         return error + "\n\n```\nTentativas:\n" + string.Join('\n', trail) + "\n```";
     }
 
-    /// <summary>
-    /// Testa no arranque se o YouTube funciona sem cookies (é o caso normal em
-    /// datacenter, onde uma sessão inválida só atrapalha). Guarda a decisão.
-    /// </summary>
-    public static async Task ProbeWithoutCookiesAsync(BotConfig config, CancellationToken cancellationToken = default)
-    {
-        if (!config.UseCookies)
-            return;
-
-        config.CookiesDisabled = true;
-
-        var (info, error) = await ResolveAsync(
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", config, null, cancellationToken);
-
-        if (info != null)
-        {
-            config.ProbeResult = $"OK sem cookies (cliente {config.PlayerClient ?? "de omissão"})";
-            Log.Ok($"YouTube acessível sem cookies - cliente {config.PlayerClient ?? "de omissão"}.");
-            return;
-        }
-
-        config.CookiesDisabled = false;
-        config.ProbeResult = "falhou sem cookies";
-        Log.Warn($"Sem cookies também não deu: {Shorten(error)}");
-    }
-
-    private static string Shorten(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return "(sem detalhe)";
-
-        var first = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).First();
-        return Flatten(first, 200);
-    }
-
     /// <summary>Sinais de que o problema é o bloqueio do YouTube, não o vídeo.</summary>
     private static bool IsSessionRejected(string? error)
         => error != null

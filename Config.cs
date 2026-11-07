@@ -33,15 +33,13 @@ public sealed class BotConfig
     /// <summary>Caminho dos cookies a passar ao yt-dlp, ou null se estiverem desativados.</summary>
     public string? CookiesToPass => UseCookies ? ResolvedCookies : null;
 
-    /// <summary>
-    /// Forçar IPv4: o YouTube pontua pior (e por blocos /64) os IPv6 de datacenter.
-    /// </summary>
-    public bool ForceIPv4 { get; set; } = true;
+    /// <summary>Forçar IPv4: útil em datacenter; no PC costuma não ser preciso.</summary>
+    public bool ForceIPv4 { get; set; } = false;
 
     /// <summary>Cliente do YouTube que já se sabe funcionar neste servidor.</summary>
     public string? PlayerClient { get; set; }
 
-    /// <summary>Resultado do teste automático feito no arranque, para o /diagnostico.</summary>
+    /// <summary>Resultado do teste de arranque (preenchido apenas se correr a verificação).</summary>
     public string? ProbeResult { get; set; }
 
     /// <summary>
